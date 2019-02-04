@@ -1,0 +1,191 @@
+#!/usr/bin/python3
+
+from bs4 import BeautifulSoup
+from colorama import Fore, Style
+from os import remove, path, popen, stat as osstat
+from socket import socket, AF_UNIX, SOCK_STREAM
+from time import sleep
+from urllib.request import urlopen
+import requests
+import stat
+import subprocess
+import sys
+
+
+class CommandRunner:
+    @staticmethod
+    def run(command):
+
+        command_parts = command.split()
+        output, error = subprocess.Popen(command_parts, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        output = output.decode("utf-8").strip()
+        error = error.decode("utf-8").strip()
+        return (output, error)
+
+    @staticmethod
+    def run_detached(command):
+
+        command_parts = command.split()
+        subprocess.Popen(command_parts, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+class YoutubeWebWrapper:
+    @staticmethod
+    def search_for_video(song_name):
+
+        videos = []
+        urls = []
+
+        query = song_name.replace(" ", "+")
+
+        url = "https://www.youtube.com/results?search_query={}".format(query)
+
+        response = urlopen(url)
+        html = response.read()
+        soup = BeautifulSoup(html, "html.parser")
+
+        video_links = soup.findAll(attrs={"class": "yt-uix-tile-link"})
+
+        for video_link in video_links:
+
+            if len(videos) == 10:
+                break
+
+            url = video_link["href"]
+
+            if "googleadservices" in url:
+                continue
+
+            data = YoutubeWebWrapper.scan_video(url)
+
+            if not data:
+                break
+
+            videos.append(data)
+            urls.append(url)
+
+        return (videos, urls)
+
+    @staticmethod
+    def scan_video(url):
+        url = "http://www.youtube.com/oembed?url={}&format=json".format(url)
+        video_data = requests.get(url)
+        if video_data.status_code != 200:
+            print("Error: " + str(video_data.status_code))
+            if video_data.status_code == 404:
+                print(Fore.LIGHTRED_EX, end="")
+                print("Are you connected to the internet?")
+                print(Style.RESET_ALL, end="")
+            return None
+
+        return video_data.json()
+
+
+class YoutubeDownloaderWrapper:
+    @staticmethod
+    def get_audio_stream(url):
+
+        cli = "youtube-dl -g {}".format(url)
+        output, _ = CommandRunner.run(cli)
+        stream_urls = output.split("\n")
+
+        url = stream_urls[1]
+        return url
+
+
+class VlcManager:
+    @staticmethod
+    def is_running():
+
+        if path.exists("/tmp/vlc.sock"):
+            mode = osstat("/tmp/vlc.sock").st_mode
+            return stat.S_ISSOCK(mode)
+
+        return False
+
+    @staticmethod
+    def stop_if_running():
+
+        if VlcManager.is_running():
+            server = socket(AF_UNIX, SOCK_STREAM)
+            server.connect("/tmp/vlc.sock")
+            message = str.encode("quit")
+            server.send(message)
+            server.close()
+
+
+## START MAIN ###
+
+try:
+
+    if len(sys.argv) < 2:
+        print("Stopping any playing track...")
+        VlcManager.stop_if_running()
+        print("OK")
+        sys.exit()
+
+    song_name = sys.argv[1]
+
+    print("Searching for ", end="")
+    print(Fore.LIGHTYELLOW_EX, end="")
+    print('"' + song_name + '"', end="")
+    print(Style.RESET_ALL)
+
+    results_data, urls = YoutubeWebWrapper.search_for_video(song_name)
+
+    choice = 0
+
+    if len(results_data) > 1:
+
+        index = 0
+
+        for result in results_data:
+
+            print(Fore.LIGHTMAGENTA_EX, end="")
+            print(" [" + str(index + 1) + "] ", end="")
+            print(Style.RESET_ALL, end="")
+            print(Fore.LIGHTCYAN_EX, end="")
+            print(result["title"], end="")
+            print(Style.RESET_ALL, end="")
+            print(" by ", end="")
+            print(Fore.YELLOW, end="")
+            print(result["author_name"], end="")
+            print(Style.RESET_ALL)
+
+            index += 1
+
+        print(Fore.YELLOW, end="")
+        choice = input("Enter Choice [1]: ")
+        print(Style.RESET_ALL)
+
+        if choice == "":
+            choice = "1"
+
+        choice = int(choice)
+        choice -= 1
+
+    if len(urls) == 0:
+        print("No results found. Exiting...")
+        sys.exit()
+
+    video_url = "https://youtube.com{}".format(urls[int(choice)])
+
+    title = results_data[choice]["title"]
+
+    print("Playing ", end="")
+    print(Fore.LIGHTMAGENTA_EX, end="")
+    print(title, end=" ")
+    print(Style.RESET_ALL, end="")
+    print("", end="\n")
+
+    audio_stream_url = YoutubeDownloaderWrapper.get_audio_stream(video_url)
+
+    VlcManager.stop_if_running()
+
+    cli = "cvlc -I oldrc --rc-unix /tmp/vlc.sock --no-video {}".format(audio_stream_url)
+    CommandRunner.run_detached(cli)
+
+except KeyboardInterrupt:
+    pass
+except Exception as e:
+    print("Error:" + str(e))

@@ -8,7 +8,7 @@ Inspired by and largely based on [ytmdl](https://github.com/deepjyoti30/ytmdl) w
 
 ### Demo
 
-![Screenshot](/demo.gif?raw=true)
+![Screenshot](/demo_cropped.gif?raw=true)
 
 ### Dependencies/Requirements
 

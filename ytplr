@@ -119,7 +119,9 @@ class VlcManager:
 try:
 
     if len(sys.argv) < 2:
-        print("Stopping any playing track...")
+        print(Fore.YELLOW, end="")
+        print("Stopping any playing track(s)...")
+        print(Style.RESET_ALL)
         VlcManager.stop_if_running()
         print("OK")
         sys.exit()

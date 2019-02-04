@@ -6,9 +6,9 @@ Inspired by and largely based on [ytmdl](https://github.com/deepjyoti30/ytmdl) w
 
 **ytplr** runs vlc in the background via it's `cvlc` cli in order to play the audio.
 
-### Screenshot
+### Demo
 
-![Screenshot](/screenshot.png?raw=true)
+![Screenshot](/screencast.gif?raw=true)
 
 ### Dependencies/Requirements
 
